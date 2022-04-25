@@ -2,17 +2,54 @@ package main
 
 import (
 	"fmt"
-	"github.com/gernest/front"
 	"io/fs"
 	"io/ioutil"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/gernest/front"
 )
 
+func findUniqueShortnames(shortname, source, existingPath string) (newSourceShortname, newExistingShortname string) {
+	/*
+		/animals/cats/paws
+		/animals/dogs/paws
+
+		shortname collision: paws
+		updated shortnames: cats/paws, dogs/paws
+	*/
+
+	if source == existingPath {
+		fmt.Printf("source (%s) and existing path (%s) are the same, not able to create unique shortnames", source, existingPath)
+		return
+	}
+
+	restOfSource := filepath.Dir(source)
+	restOfExisting := filepath.Dir(existingPath)
+
+	commonPath := shortname
+	for restOfSource != "/" && restOfExisting != "/" {
+		sourceBase := filepath.Base(restOfSource)
+		existingBase := filepath.Base(restOfExisting)
+
+		if sourceBase != existingBase {
+			newSourceShortname = path.Join(commonPath, sourceBase)
+			newExistingShortname = path.Join(commonPath, sourceBase)
+			return
+		}
+		commonPath = path.Join(sourceBase, commonPath)
+
+		restOfSource = filepath.Dir(restOfSource)
+		restOfExisting = filepath.Dir(restOfExisting)
+	}
+	return
+}
+
 // recursively walk directory and return all files with given extension
-func walk(root, ext string, index bool, ignorePaths map[string]struct{}) (res []Link, i ContentIndex) {
+func walk(root, ext string, index bool, ignorePaths map[string]struct{}) (res []Link, i ContentIndex, shortnameToPathLookup map[string]string) {
 	fmt.Printf("Scraping %s\n", root)
 	i = make(ContentIndex)
 
@@ -21,6 +58,8 @@ func walk(root, ext string, index bool, ignorePaths map[string]struct{}) (res []
 	nPrivate := 0
 
 	start := time.Now()
+
+	shortnameToPathLookup = map[string]string{}
 
 	err := filepath.WalkDir(root, func(fp string, d fs.DirEntry, e error) error {
 		if e != nil {
@@ -61,6 +100,20 @@ func walk(root, ext string, index bool, ignorePaths map[string]struct{}) (res []
 						Title:        title,
 						Content:      body,
 					}
+
+					shortname := filepath.Base(source)
+					if existingPath, ok := shortnameToPathLookup[shortname]; ok {
+
+						// we have a collision with the shortname, lets find unique names for the two
+						delete(shortnameToPathLookup, shortname)
+
+						newSourceShortname, newExistingShortname := findUniqueShortnames(shortname, source, existingPath)
+
+						shortnameToPathLookup[newSourceShortname] = source
+						shortnameToPathLookup[newExistingShortname] = existingPath
+					} else {
+						shortnameToPathLookup[shortname] = source
+					}
 				} else {
 					fmt.Printf("[Ignored] %s\n", d.Name())
 					nPrivate++
@@ -78,7 +131,7 @@ func walk(root, ext string, index bool, ignorePaths map[string]struct{}) (res []
 	fmt.Printf("[DONE] in %s\n", end.Sub(start).Round(time.Millisecond))
 	fmt.Printf("Ignored %d private files \n", nPrivate)
 	fmt.Printf("Parsed %d total links \n", len(res))
-	return res, i
+	return
 }
 
 func getText(dir string) string {

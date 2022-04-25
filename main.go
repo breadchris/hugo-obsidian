@@ -2,12 +2,13 @@ package main
 
 import (
 	"flag"
-	"github.com/BurntSushi/toml"
-	wikilink "github.com/abhinav/goldmark-wikilink"
-	"github.com/yuin/goldmark"
 	"io/ioutil"
 	"path/filepath"
 	"time"
+
+	"github.com/BurntSushi/toml"
+	wikilink "github.com/abhinav/goldmark-wikilink"
+	"github.com/yuin/goldmark"
 )
 
 var md goldmark.Markdown
@@ -74,9 +75,9 @@ func main() {
 	flag.Parse()
 
 	ignoreBlobs := getIgnoredFiles(*root)
-	l, i := walk(*in, ".md", *index, ignoreBlobs)
+	l, i, shortnameToPathLookup := walk(*in, ".md", *index, ignoreBlobs)
 	f := filter(l)
-	err := write(f, i, *index, *out)
+	err := write(f, i, shortnameToPathLookup, *index, *out)
 	if err != nil {
 		panic(err)
 	}

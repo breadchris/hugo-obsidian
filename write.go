@@ -4,13 +4,14 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"path"
+	"path/filepath"
 )
 
-func write(links []Link, contentIndex ContentIndex, toIndex bool, out string) error {
-	index := index(links)
+func write(links []Link, contentIndex ContentIndex, shortnameToPathLookup map[string]string, toIndex bool, out string) error {
+	index := index(links, shortnameToPathLookup)
 	resStruct := struct {
-		Index Index 	`json:"index"`
-		Links []Link 	`json:"links"`
+		Index Index  `json:"index"`
+		Links []Link `json:"links"`
 	}{
 		Index: index,
 		Links: links,
@@ -41,7 +42,7 @@ func write(links []Link, contentIndex ContentIndex, toIndex bool, out string) er
 }
 
 // constructs index from links
-func index(links []Link) (index Index) {
+func index(links []Link, shortnameToPathLookup map[string]string) (index Index) {
 	linkMap := make(map[string][]Link)
 	backlinkMap := make(map[string][]Link)
 	for _, l := range links {
@@ -49,7 +50,14 @@ func index(links []Link) (index Index) {
 		if _, ok := backlinkMap[l.Target]; ok {
 			backlinkMap[l.Target] = append(backlinkMap[l.Target], l)
 		} else {
-			backlinkMap[l.Target] = []Link{l}
+			// try the shortname for the link
+			targetName := filepath.Base(l.Target)
+
+			if path, ok := shortnameToPathLookup[targetName]; ok {
+				backlinkMap[path] = append(backlinkMap[path], l)
+			} else {
+				backlinkMap[l.Target] = []Link{l}
+			}
 		}
 
 		// regular link
@@ -63,6 +71,3 @@ func index(links []Link) (index Index) {
 	index.Backlinks = backlinkMap
 	return index
 }
-
-
-
